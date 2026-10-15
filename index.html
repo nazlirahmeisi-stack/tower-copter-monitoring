@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#ffffff" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Tower Copter" />
+<title>Tower Copter Monitoring</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f8fafc; --panel:#ffffff; --panel2:#f1f5f9; --line:#e2e8f0;
+    --text:#0f172a; --muted:#64748b; --faint:#94a3b8;
+    --alt:#0284c7; --set:#d97706; --err:#dc2626; --rpm:#7c3aed; --pwm:#0d9488; --cur:#ca8a04;
+    --good:#16a34a; --warn:#d97706; --bad:#dc2626;
+    --sans:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    box-sizing:border-box;
+  }
+  *{box-sizing:inherit;}
+  [hidden]{display:none !important;}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);overflow:hidden;}
+  h1,h2{margin:0;font-weight:600;}
+  button,select,input{font-family:inherit;}
+  :focus-visible{outline:2px solid var(--alt);outline-offset:2px;}
+  .i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto;}
+  .app{height:100vh;display:flex;flex-direction:column;}
+
+  .top{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+    padding:10px 20px;border-bottom:1px solid var(--line);background:var(--panel);}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .logo{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,var(--alt),var(--pwm));}
+  .logo .i{width:22px;height:22px;stroke-width:2.2;}
+  .brand h1{font-size:16px;}
+  .brand p{margin:2px 0 0;font-size:12px;color:var(--muted);}
+  .nav{display:flex;gap:4px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:3px;}
+  .nav button{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:500;padding:7px 14px;border-radius:8px;border:0;background:transparent;color:var(--muted);cursor:pointer;}
+  .nav button[aria-selected=true]{background:var(--panel);color:var(--text);box-shadow:0 1px 2px rgba(15,23,42,.12);}
+  .top-r{display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+  .pill{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:500;padding:6px 13px;border-radius:99px;border:1px solid;}
+  .pill .dot{width:8px;height:8px;border-radius:50%;background:currentColor;}
+  .pill.on{color:#15803d;border-color:#a7f3d0;background:#ecfdf5;}
+  .pill.on .dot{animation:pulse 2s infinite;}
+  .pill.wait{color:#b45309;border-color:#fde68a;background:#fffbeb;}
+  .pill.off{color:#b91c1c;border-color:#fecaca;background:#fef2f2;}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(22,163,74,.5);}70%{box-shadow:0 0 0 7px rgba(22,163,74,0);}100%{box-shadow:0 0 0 0 rgba(22,163,74,0);}}
+  .upd{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;}
+  .upd b{font-family:var(--mono);font-weight:500;color:var(--text);}
+
+  .main{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:332px 1fr;gap:14px;padding:14px 20px 16px;}
+  .side{display:flex;flex-direction:column;gap:14px;min-height:0;overflow-y:auto;padding-right:2px;scrollbar-width:thin;scrollbar-color:var(--line) transparent;}
+  .content{display:flex;flex-direction:column;gap:14px;min-height:0;}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;min-height:0;}
+  .ph{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex:0 0 auto;}
+  .pt{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;}
+  .pt .i{color:var(--muted);}
+  .sub{font-size:11.5px;font-weight:500;color:var(--muted);margin:2px 0 6px;}
+
+  .chip{font-family:var(--mono);font-size:11px;font-weight:500;padding:3px 9px;border-radius:99px;background:var(--panel2);color:var(--muted);border:1px solid var(--line);white-space:nowrap;}
+  .chip.run{color:#15803d;border-color:#a7f3d0;background:#ecfdf5;}
+  .chip.warn{color:#b45309;border-color:#fde68a;background:#fffbeb;}
+  .sp-head{font-size:12px;color:var(--muted);margin-bottom:6px;}
+  .sp-box{display:flex;align-items:baseline;gap:6px;margin-bottom:12px;}
+  .sp-box input{font:600 34px/1 var(--mono);color:var(--set);background:transparent;border:0;border-bottom:1px dashed #cbd5e1;width:120px;padding:2px 0;border-radius:0;}
+  .sp-box input:focus-visible{outline:0;border-bottom-color:var(--set);}
+  .sp-box span{font-size:13px;color:var(--muted);}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:99px;margin:6px 0 4px;cursor:pointer;
+    background:linear-gradient(to right,var(--set) var(--p,50%),var(--line) var(--p,50%));}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:#fff;border:4px solid var(--set);box-shadow:0 1px 3px rgba(15,23,42,.25);}
+  input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#fff;border:4px solid var(--set);}
+  input[type=range]::-moz-range-track{background:transparent;}
+  .scale{display:flex;justify-content:space-between;font:400 10.5px var(--mono);color:var(--faint);margin-bottom:12px;}
+  .btn{display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:600;border-radius:9px;padding:10px 12px;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--text);transition:filter .12s;}
+  .btn:hover:not(:disabled){filter:brightness(.96);} .btn:active:not(:disabled){filter:brightness(.9);}
+  .btn:disabled{opacity:.45;cursor:not-allowed;}
+  .btn.set{width:100%;margin-bottom:10px;border-color:#fcd34d;color:#b45309;background:#fffbeb;}
+  .btn.start{background:var(--good);color:#fff;border-color:transparent;}
+  .btn.stop{background:var(--bad);color:#fff;border-color:transparent;}
+  .btn.primary{background:var(--alt);color:#fff;border-color:transparent;}
+  .btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;}
+  .cmd{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px;}
+  .cmd b{font:500 12px var(--mono);color:var(--text);}
+  .cmd b.sent{color:var(--warn);} .cmd b.ack{color:var(--good);} .cmd b.fail{color:var(--bad);}
+
+  .f{display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--muted);min-width:0;}
+  .f input,.f select{font:500 13px var(--mono);color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 8px;width:100%;}
+  .f select{font-family:var(--sans);}
+  .pid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0 10px;}
+  .sinfo{font-size:12px;color:var(--muted);line-height:1.45;margin-top:2px;}
+  .smsg{font-size:12px;color:var(--bad);margin-top:6px;min-height:0;}
+  .cards3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;}
+  .mc{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;border-top:3px solid var(--c);min-width:0;}
+  .mc-l{font-size:11px;color:var(--muted);}
+  .mc-v{font:600 16px/1.3 var(--mono);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .mc-v[data-st=good]{color:var(--good);} .mc-v[data-st=warn]{color:var(--warn);} .mc-v[data-st=bad]{color:var(--bad);}
+
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;flex:0 0 auto;}
+  .kpi{position:relative;overflow:hidden;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px 6px 14px;}
+  .kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--c);}
+  .kpi-h{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);}
+  .ico{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;flex:0 0 auto;background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--c);}
+  .ico .i{width:14px;height:14px;}
+  .kpi-v{font:600 26px/1.15 var(--mono);margin:6px 0 2px;white-space:nowrap;}
+  .kpi-v small{font:500 11px var(--sans);color:var(--muted);margin-left:4px;}
+  .kpi[data-st=good] .kpi-v{color:var(--good);} .kpi[data-st=warn] .kpi-v{color:var(--warn);} .kpi[data-st=bad] .kpi-v{color:var(--bad);}
+  canvas.spark{display:block;width:100%;height:26px;}
+
+  .chart-main{flex:1.35 1 0;}
+  .bottom{flex:1 1 0;min-height:0;display:grid;grid-template-columns:1.1fr 1fr;gap:14px;}
+  .cwrap{flex:1 1 auto;min-height:0;position:relative;}
+  .cwrap canvas{position:absolute;inset:0;width:100%;height:100%;}
+  .legend{display:flex;gap:14px;font-size:12px;color:var(--muted);}
+  .legend span{display:flex;align-items:center;gap:6px;}
+  .sw{width:12px;height:3px;border-radius:2px;display:inline-block;}
+  .sw.band{height:10px;background:rgba(217,119,6,.18);}
+  .tabs{display:flex;gap:4px;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:3px;}
+  .tab{font-size:12px;font-weight:500;padding:4px 10px;border-radius:6px;border:0;background:transparent;color:var(--muted);cursor:pointer;}
+  .tab[aria-selected=true]{background:var(--panel);color:var(--text);box-shadow:0 1px 2px rgba(15,23,42,.12);}
+  .tscroll{flex:1 1 auto;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--line) transparent;}
+  table{width:100%;border-collapse:collapse;font:400 12px var(--mono);}
+  thead th{position:sticky;top:0;background:var(--panel);text-align:right;font:500 11.5px var(--sans);color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  thead th:first-child,tbody td:first-child{text-align:left;}
+  tbody td{padding:6px 8px;border-bottom:1px solid var(--panel2);text-align:right;white-space:nowrap;}
+  tbody tr:first-child td.cy{color:var(--alt);}
+  td.best{color:var(--good);font-weight:600;}
+  td.na{color:var(--faint);}
+  .link{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 10px;cursor:pointer;}
+  .link:hover{color:var(--text);}
+
+  .ana{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:14px;padding:14px 20px 16px;}
+  .ana .grid2{flex:1 1 0;min-height:0;display:grid;grid-template-columns:minmax(260px,.55fr) 1.45fr;gap:14px;}
+  .ana-top{flex:0 0 auto;}
+  .note{font-size:12px;color:var(--muted);margin:8px 0 0;}
+  .bars{display:flex;flex-direction:column;gap:14px;margin-top:4px;}
+  .bar{display:grid;grid-template-columns:44px 1fr 74px;align-items:center;gap:10px;font-size:12.5px;}
+  .bar .bn{font-weight:600;}
+  .bt{height:14px;background:var(--panel2);border-radius:99px;overflow:hidden;}
+  .bt i{display:block;height:100%;background:var(--alt);border-radius:99px;}
+  .bar.best .bt i{background:var(--good);}
+  .bar b{font:500 12px var(--mono);text-align:right;}
+  .empty{font-size:13px;color:var(--faint);padding:18px 0;text-align:center;}
+
+  @media (max-width:1180px){
+    html,body{overflow:auto;} .app{height:auto;}
+    .main{grid-template-columns:1fr;} .side{overflow:visible;}
+    .kpis{grid-template-columns:repeat(3,1fr);}
+    .chart-main{min-height:300px;flex:none;} .bottom{grid-template-columns:1fr;} .bottom .panel{min-height:280px;}
+    .ana .grid2{grid-template-columns:1fr;} .ana .grid2 .panel{min-height:260px;}
+  }
+  @media (max-width:640px){
+    .top{padding:10px 14px;gap:10px;} .brand p{display:none;}
+    .nav{width:100%;} .nav button{flex:1;justify-content:center;}
+    .top-r{width:100%;justify-content:space-between;}
+    .main,.ana{padding:12px;gap:12px;} .panel{padding:12px;}
+    .ph{flex-wrap:wrap;} .legend{flex-wrap:wrap;gap:10px;}
+    .kpis{grid-template-columns:repeat(2,1fr);} .kpi-v{font-size:22px;}
+    .f input,.f select{font-size:16px;}
+    .mc-v{font-size:14px;}
+    .chart-main{min-height:240px;} .bottom .panel{min-height:240px;}
+    .tab{padding:4px 8px;}
+    .bar{grid-template-columns:40px 1fr 64px;}
+  }
+  @media (prefers-reduced-motion:reduce){.pill.on .dot{animation:none;}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-copter" viewBox="0 0 24 24"><line x1="3" y1="5" x2="21" y2="5"/><line x1="12" y1="5" x2="12" y2="9"/><rect x="7" y="9" width="10" height="6" rx="2"/><line x1="12" y1="15" x2="12" y2="21"/><line x1="8" y1="21" x2="16" y2="21"/></symbol>
+  <symbol id="i-alt" viewBox="0 0 24 24"><polyline points="8 18 12 22 16 18"/><polyline points="8 6 12 2 16 6"/><line x1="12" y1="2" x2="12" y2="22"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+  <symbol id="i-delta" viewBox="0 0 24 24"><path d="M12 3 2 21h20L12 3z"/></symbol>
+  <symbol id="i-gauge" viewBox="0 0 24 24"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></symbol>
+  <symbol id="i-wave" viewBox="0 0 24 24"><polyline points="2 16 6 16 6 8 12 8 12 16 18 16 18 8 22 8"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></symbol>
+  <symbol id="i-flask" viewBox="0 0 24 24"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/></symbol>
+  <symbol id="i-live" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></symbol>
+  <symbol id="i-sigma" viewBox="0 0 24 24"><path d="M18 6H6l6 6-6 6h12"/></symbol>
+</svg>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <div class="logo"><svg class="i"><use href="#i-copter"/></svg></div>
+      <div>
+        <h1>Tower Copter Monitoring</h1>
+        <p>Monitoring dan Supervisory Control berbasis IoT dengan ESP32, MQTT, dan FastAPI</p>
+      </div>
+    </div>
+    <nav class="nav" role="tablist">
+      <button role="tab" id="navMon" aria-selected="true"><svg class="i"><use href="#i-live"/></svg>Monitoring</button>
+      <button role="tab" id="navAna" aria-selected="false"><svg class="i"><use href="#i-flask"/></svg>Analisis metode</button>
+    </nav>
+    <div class="top-r">
+      <div class="upd"><svg class="i"><use href="#i-clock"/></svg>Data terakhir <b id="updText">--:--:--</b></div>
+      <div class="pill off" id="pill"><span class="dot"></span><span id="pillText">Menghubungkan</span></div>
+    </div>
+  </header>
+
+  <!-- ================= HALAMAN MONITORING ================= -->
+  <div class="main" id="pageMon">
+    <aside class="side">
+      <section class="panel" aria-label="Kontrol supervisory">
+        <div class="ph">
+          <h2 class="pt"><svg class="i"><use href="#i-sliders"/></svg>Kontrol supervisory</h2>
+          <span class="chip" id="stateChip">STOPPED</span>
+        </div>
+        <div class="sp-head"><label for="spNum">Setpoint ketinggian</label></div>
+        <div class="sp-box"><input id="spNum" type="number" /><span>cm</span></div>
+        <input id="spRange" type="range" aria-label="Geser setpoint" />
+        <div class="scale"><span id="scMin"></span><span id="scMid"></span><span id="scMax"></span></div>
+        <button class="btn set" id="setBtn"><svg class="i"><use href="#i-send"/></svg>Kirim setpoint</button>
+        <div class="btns">
+          <button class="btn start" id="startBtn"><svg class="i"><use href="#i-play"/></svg>START</button>
+          <button class="btn stop" id="stopBtn"><svg class="i"><use href="#i-stop"/></svg>STOP</button>
+        </div>
+        <div class="cmd"><span id="cmdLabel">Belum ada perintah</span><b id="cmdStatus" aria-live="polite">-</b></div>
+      </section>
+
+      <section class="panel" aria-label="Sesi pengujian">
+        <div class="ph">
+          <h2 class="pt"><svg class="i"><use href="#i-flask"/></svg>Sesi pengujian</h2>
+          <span class="chip" id="sessChip">Belum ada sesi</span>
+        </div>
+        <label class="f"><span>Metode tuning</span>
+          <select id="mSel">
+            <option value="ZN">Ziegler-Nichols</option><option value="CPO">Crested Porcupine (CPO)</option>
+            <option value="SO">Snake Optimizer (SO)</option><option value="GJO">Golden Jackal (GJO)</option>
+            <option value="MANUAL">Manual</option>
+          </select>
+        </label>
+        <div class="pid">
+          <label class="f"><span>Kp</span><input id="kp" type="number" step="any" placeholder="opsional" /></label>
+          <label class="f"><span>Ki</span><input id="ki" type="number" step="any" placeholder="opsional" /></label>
+          <label class="f"><span>Kd</span><input id="kd" type="number" step="any" placeholder="opsional" /></label>
+        </div>
+        <div class="btns" style="margin-bottom:0">
+          <button class="btn primary" id="sStart">Mulai sesi</button>
+          <button class="btn" id="sCancel">Batalkan</button>
+        </div>
+        <div class="sinfo" id="sessInfo">Pilih metode lalu mulai sesi. Sesi selesai otomatis saat STOP ditekan.</div>
+        <div class="smsg" id="sessMsg" role="status"></div>
+      </section>
+
+      <section class="panel" aria-label="Hasil sesi">
+        <div class="ph"><h2 class="pt"><svg class="i"><use href="#i-sigma"/></svg>Hasil sesi (dihitung backend)</h2></div>
+        <div class="sub">Respons transien</div>
+        <div class="cards3">
+          <div class="mc" style="--c:var(--alt)"><div class="mc-l">Rise time</div><div class="mc-v" id="mRise">-</div></div>
+          <div class="mc" style="--c:var(--set)"><div class="mc-l">Overshoot</div><div class="mc-v" id="mOs">-</div></div>
+          <div class="mc" style="--c:var(--pwm)"><div class="mc-l">Settling</div><div class="mc-v" id="mSet">-</div></div>
+        </div>
+        <div class="sub">Indeks performa kontrol</div>
+        <div class="cards3" style="margin-bottom:0">
+          <div class="mc" style="--c:var(--alt)"><div class="mc-l">IAE</div><div class="mc-v" id="mIae">-</div></div>
+          <div class="mc" style="--c:var(--rpm)"><div class="mc-l">ISE</div><div class="mc-v" id="mIse">-</div></div>
+          <div class="mc" style="--c:var(--cur)"><div class="mc-l">ITAE</div><div class="mc-v" id="mItae">-</div></div>
+        </div>
+      </section>
+    </aside>
+
+    <section class="content">
+      <div class="kpis">
+        <div class="kpi" style="--c:var(--alt)"><div class="kpi-h"><span class="ico"><svg class="i"><use href="#i-alt"/></svg></span>Altitude</div><div class="kpi-v" id="vAlt">-</div><canvas class="spark" id="spAlt"></canvas></div>
+        <div class="kpi" style="--c:var(--set)"><div class="kpi-h"><span class="ico"><svg class="i"><use href="#i-target"/></svg></span>Setpoint</div><div class="kpi-v" id="vSet">-</div><canvas class="spark" id="spSet"></canvas></div>
+        <div class="kpi" id="kErr" style="--c:var(--err)"><div class="kpi-h"><span class="ico"><svg class="i"><use href="#i-delta"/></svg></span>Error</div><div class="kpi-v" id="vErr">-</div><canvas class="spark" id="spErr"></canvas></div>
+        <div class="kpi" style="--c:var(--rpm)"><div class="kpi-h"><span class="ico"><svg class="i"><use href="#i-gauge"/></svg></span>RPM</div><div class="kpi-v" id="vRpm">-</div><canvas class="spark" id="spRpm"></canvas></div>
+        <div class="kpi" style="--c:var(--pwm)"><div class="kpi-h"><span class="ico"><svg class="i"><use href="#i-wave"/></svg></span>PWM</div><div class="kpi-v" id="vPwm">-</div><canvas class="spark" id="spPwm"></canvas></div>
+        <div class="kpi" style="--c:var(--cur)"><div class="kpi-h"><span class="ico"><svg class="i"><use href="#i-zap"/></svg></span>Arus</div><div class="kpi-v" id="vCur">-</div><canvas class="spark" id="spCur"></canvas></div>
+      </div>
+
+      <section class="panel chart-main">
+        <div class="ph">
+          <h2 class="pt"><svg class="i"><use href="#i-chart"/></svg>Altitude terhadap setpoint</h2>
+          <div class="legend">
+            <span><i class="sw" style="background:var(--alt)"></i>Altitude</span>
+            <span><i class="sw" style="background:var(--set)"></i>Setpoint</span>
+            <span><i class="sw band"></i>Toleransi 2%</span>
+          </div>
+        </div>
+        <div class="cwrap"><canvas id="cMain"></canvas></div>
+      </section>
+
+      <div class="bottom">
+        <section class="panel">
+          <div class="ph">
+            <h2 class="pt" id="sideTitle">RPM</h2>
+            <div class="tabs" role="tablist">
+              <button class="tab" role="tab" data-tab="rpm" aria-selected="true">RPM</button>
+              <button class="tab" role="tab" data-tab="pwm" aria-selected="false">PWM</button>
+              <button class="tab" role="tab" data-tab="cur" aria-selected="false">Arus</button>
+              <button class="tab" role="tab" data-tab="err" aria-selected="false">Error</button>
+            </div>
+          </div>
+          <div class="cwrap"><canvas id="cSide"></canvas></div>
+        </section>
+        <section class="panel">
+          <div class="ph">
+            <h2 class="pt">Log telemetri terbaru</h2>
+            <button class="link" id="csvBtn"><svg class="i" style="width:14px;height:14px"><use href="#i-down"/></svg>Unduh CSV</button>
+          </div>
+          <div class="tscroll">
+            <table>
+              <thead><tr><th>Waktu</th><th>Altitude</th><th>Setpoint</th><th>Error</th><th>RPM</th><th>PWM</th><th>Arus</th></tr></thead>
+              <tbody id="tbody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </section>
+  </div>
+
+  <!-- ================= HALAMAN ANALISIS ================= -->
+  <div class="ana" id="pageAna" hidden>
+    <section class="panel ana-top">
+      <div class="ph"><h2 class="pt"><svg class="i"><use href="#i-flask"/></svg>Perbandingan metode tuning PID</h2></div>
+      <div class="tscroll">
+        <table>
+          <thead><tr><th>Metode</th><th>Percobaan</th><th>Kp</th><th>Ki</th><th>Kd</th><th>Rise time (s)</th><th>Overshoot (%)</th><th>Settling (s)</th><th>SSE (cm)</th><th>IAE</th><th>ISE</th><th>ITAE</th></tr></thead>
+          <tbody id="cmpBody"></tbody>
+        </table>
+      </div>
+      <p class="note">Tiap metode menampilkan percobaan terbaik (ITAE terendah) dari sesi yang selesai. Nilai hijau adalah yang terkecil di kolomnya.</p>
+    </section>
+    <div class="grid2">
+      <section class="panel">
+        <div class="ph"><h2 class="pt">ITAE per metode</h2><span class="chip">lebih kecil lebih baik</span></div>
+        <div class="bars" id="bars"></div>
+      </section>
+      <section class="panel">
+        <div class="ph">
+          <h2 class="pt">Riwayat sesi</h2>
+          <button class="link" id="csvSess"><svg class="i" style="width:14px;height:14px"><use href="#i-down"/></svg>Unduh CSV</button>
+        </div>
+        <div class="tscroll">
+          <table>
+            <thead><tr><th>ID</th><th>Metode</th><th>Status</th><th>Mulai</th><th>Step (cm)</th><th>Rise (s)</th><th>OS (%)</th><th>Settling (s)</th><th>ITAE</th></tr></thead>
+            <tbody id="histBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  var CFG = { API: new URLSearchParams(location.search).get('api') || (location.port === '8000' ? location.origin : 'http://127.0.0.1:8000'), POLL:1000, STALE:5000, SP_MIN:0, SP_MAX:200, SP_STEP:1, MAXPTS:60, BAND:0.02 };
+  var C = { alt:'#0284c7', set:'#d97706', err:'#dc2626', rpm:'#7c3aed', pwm:'#0d9488', cur:'#ca8a04' };
+  var METHODS = [['ZN','Ziegler-Nichols'],['CPO','Crested Porcupine'],['SO','Snake Optimizer'],['GJO','Golden Jackal']];
+  var $ = function(id){ return document.getElementById(id); };
+  var hist = { t:[], alt:[], set:[], rpm:[], pwm:[], cur:[], err:[] };
+  var rows = [], lastId = null, pending = null, lastNewAt = 0, online = false, tab = 'rpm', touched = false;
+  var curSp = 0, page = 'mon', lastList = [], lastMsg = '';
+  var TABS = {
+    rpm:{k:'rpm', c:C.rpm, min:0, dec:0, name:'RPM'},
+    pwm:{k:'pwm', c:C.pwm, min:0, dec:0, name:'PWM'},
+    cur:{k:'cur', c:C.cur, min:0, dec:2, name:'Arus (A)'},
+    err:{k:'err', c:C.err, dec:1, zero:true, name:'Error (cm)'}
+  };
+
+  function num(v){ v = Number(v); return isFinite(v) ? v : 0; }
+  function fmtTime(ts){ if(!ts) return '--:--:--'; var s = String(ts), i = s.indexOf('T'); return i >= 0 ? s.slice(i+1, i+9) : s.slice(-8); }
+  function fmtDT(ts){ if(!ts) return '-'; var s = String(ts).replace('T',' '); return s.slice(8,10)+'/'+s.slice(5,7)+' '+s.slice(11,19); }
+  function fmtN(v,d){ return Number(v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+  function hexA(h,a){ var n = parseInt(h.slice(1),16); return 'rgba('+(n>>16&255)+','+(n>>8&255)+','+(n&255)+','+a+')'; }
+  function setKpi(id,v,u){ $(id).innerHTML = v + (u ? '<small>'+u+'</small>' : ''); }
+  function jsonHdr(){ return {'Content-Type':'application/json'}; }
+
+  async function api(path, opt){
+    var r = await fetch(CFG.API + path, opt), j = null;
+    try{ j = await r.json(); }catch(e){}
+    if(!r.ok){
+      var d = j && j.detail, err = new Error(typeof d === 'string' ? d : (d ? 'Input tidak valid' : 'HTTP ' + r.status));
+      err.status = r.status; throw err;
+    }
+    return j;
+  }
+
+  /* ---------- status koneksi ---------- */
+  function refreshStatus(){
+    var mode = !online ? 'off' : (Date.now() - lastNewAt > CFG.STALE ? 'wait' : 'on');
+    $('pill').className = 'pill ' + mode;
+    $('pillText').textContent = { on:'Sistem online', wait:'Menunggu data perangkat', off:'Backend tidak terhubung' }[mode];
+  }
+
+  /* ---------- kontrol supervisory ---------- */
+  function paintSlider(){
+    var r = $('spRange'), p = (r.value - CFG.SP_MIN) / (CFG.SP_MAX - CFG.SP_MIN) * 100;
+    r.style.setProperty('--p', p + '%');
+  }
+  function setCmd(label, st, text){ $('cmdLabel').textContent = label; var b = $('cmdStatus'); b.textContent = text; b.className = st; }
+  async function post(command, setpoint){
+    var label = command + (setpoint !== undefined ? ' ' + setpoint : '');
+    setCmd(label, 'sent', 'SENT');
+    try{
+      var body = { command: command };
+      if(setpoint !== undefined) body.setpoint = setpoint;
+      var data = await api('/control', { method:'POST', headers:jsonHdr(), body:JSON.stringify(body) });
+      pending = data.id; setCmd(label + ' #' + data.id, 'sent', 'SENT');
+    }catch(e){ pending = null; setCmd(label, 'fail', 'GAGAL'); console.error(e); }
+  }
+  function initControl(){
+    var r = $('spRange'), n = $('spNum');
+    r.min = n.min = CFG.SP_MIN; r.max = n.max = CFG.SP_MAX; r.step = n.step = CFG.SP_STEP; r.value = n.value = 100;
+    $('scMin').textContent = CFG.SP_MIN; $('scMax').textContent = CFG.SP_MAX; $('scMid').textContent = (CFG.SP_MIN + CFG.SP_MAX) / 2;
+    r.addEventListener('input', function(){ n.value = r.value; touched = true; paintSlider(); });
+    n.addEventListener('input', function(){ r.value = n.value; touched = true; paintSlider(); });
+    paintSlider();
+    $('setBtn').addEventListener('click', function(){
+      var v = parseFloat(n.value); if(isNaN(v)) return;
+      post('SETPOINT', Math.min(CFG.SP_MAX, Math.max(CFG.SP_MIN, v)));
+    });
+    $('startBtn').addEventListener('click', function(){ post('START'); });
+    $('stopBtn').addEventListener('click', function(){ post('STOP'); });
+  }
+
+  /* ---------- sesi pengujian (data dari backend) ---------- */
+  function sessMsg(t){ if(t !== lastMsg){ lastMsg = t; $('sessMsg').textContent = t; } }
+  function setC(id, v, d, u){ $(id).textContent = v == null ? '-' : fmtN(v, d) + (u || ''); }
+  function renderSession(s){
+    var act = !!s && (s.status === 'WAITING' || s.status === 'RUNNING');
+    $('sStart').disabled = act; $('sCancel').disabled = !act;
+    var L = { WAITING:'Menunggu START', RUNNING:'Merekam', COMPLETED:'Selesai' };
+    $('sessChip').textContent = s ? L[s.status] : 'Belum ada sesi';
+    $('sessChip').className = 'chip' + (s ? (s.status === 'RUNNING' ? ' run' : (s.status === 'WAITING' ? ' warn' : '')) : '');
+    var info = 'Pilih metode lalu mulai sesi. Sesi selesai otomatis saat STOP ditekan.';
+    if(s){
+      info = 'Sesi #' + s.id + ' (' + s.method + ')';
+      if(s.status === 'WAITING') info += ' menunggu START dari dashboard.';
+      else if(s.y0 != null && s.setpoint != null){
+        info += ', step ' + num(s.y0).toFixed(0) + ' ke ' + num(s.setpoint).toFixed(0) + ' cm';
+        if(Math.abs(s.setpoint - s.y0) < 1) info += '. Tidak ada step (selisih kurang dari 1 cm), hanya indeks yang dihitung.';
+        else if(s.status === 'RUNNING' && s.settling_time == null) info += '. Belum stabil di band 2%.';
+      }
+    }
+    $('sessInfo').textContent = info;
+    setC('mRise', s && s.rise_time, 1, ' s'); setC('mOs', s && s.overshoot, 1, ' %'); setC('mSet', s && s.settling_time, 1, ' s');
+    setC('mIae', s && s.iae, 1); setC('mIse', s && s.ise, 1); setC('mItae', s && s.itae, 1);
+    var os = s && s.overshoot;
+    $('mOs').dataset.st = os == null ? '' : (os < 5 ? 'good' : (os < 15 ? 'warn' : 'bad'));
+  }
+  async function pollSession(){
+    try{ renderSession(await api('/sessions/current')); }
+    catch(e){ if(e.status === 404) sessMsg('Backend belum mendukung sesi. Perbarui main.py dan metrics.py.'); }
+  }
+  $('sStart').addEventListener('click', async function(){
+    var body = { method: $('mSel').value };
+    ['kp','ki','kd'].forEach(function(k){ var v = parseFloat($(k).value); if(!isNaN(v)) body[k] = v; });
+    try{ await api('/sessions/start', { method:'POST', headers:jsonHdr(), body:JSON.stringify(body) }); sessMsg(''); pollSession(); }
+    catch(e){ sessMsg(e.message); }
+  });
+  $('sCancel').addEventListener('click', async function(){
+    try{
+      var s = await api('/sessions/current');
+      if(s && (s.status === 'WAITING' || s.status === 'RUNNING')) await api('/sessions/' + s.id + '/cancel', { method:'POST' });
+      sessMsg(''); pollSession();
+    }catch(e){ sessMsg(e.message); }
+  });
+
+  /* ---------- data telemetry ---------- */
+  function update(d){
+    var alt = num(d.altitude), sp = num(d.setpoint), err = num(d.error), rpm = num(d.rpm), pwm = num(d.pwm), cur = num(d.current);
+    var run = rpm > 0, tstr = fmtTime(d.timestamp);
+    curSp = sp;
+    $('updText').textContent = tstr;
+    $('stateChip').textContent = run ? 'RUNNING' : 'STOPPED';
+    $('stateChip').className = 'chip' + (run ? ' run' : '');
+    setKpi('vAlt', alt.toFixed(1), 'cm'); setKpi('vSet', sp.toFixed(1), 'cm'); setKpi('vErr', err.toFixed(2), 'cm');
+    setKpi('vRpm', rpm.toFixed(0), ''); setKpi('vPwm', pwm.toFixed(0), ''); setKpi('vCur', cur.toFixed(2), 'A');
+    var a = Math.abs(err); $('kErr').dataset.st = a <= 1 ? 'good' : (a <= 5 ? 'warn' : 'bad');
+    if(!touched){ $('spRange').value = $('spNum').value = sp; paintSlider(); }
+
+    hist.t.push(tstr); hist.alt.push(alt); hist.set.push(sp); hist.rpm.push(rpm); hist.pwm.push(pwm); hist.cur.push(cur); hist.err.push(err);
+    Object.keys(hist).forEach(function(k){ if(hist[k].length > CFG.MAXPTS) hist[k].shift(); });
+
+    rows.unshift({ t:tstr, alt:alt, sp:sp, err:err, rpm:rpm, pwm:pwm, cur:cur });
+    if(rows.length > 12) rows.pop();
+    $('tbody').innerHTML = rows.map(function(r){
+      return '<tr><td class="cy">'+r.t+'</td><td>'+r.alt.toFixed(1)+'</td><td>'+r.sp.toFixed(1)+'</td><td>'+r.err.toFixed(2)+'</td><td>'+r.rpm.toFixed(0)+'</td><td>'+r.pwm.toFixed(0)+'</td><td>'+r.cur.toFixed(2)+'</td></tr>';
+    }).join('');
+    if(page === 'mon') drawAll();
+  }
+  async function pollTelemetry(){
+    try{
+      var d = await api('/telemetry/latest');
+      online = true;
+      if(d && d.id !== lastId){ lastId = d.id; lastNewAt = Date.now(); update(d); }
+    }catch(e){ online = false; }
+    refreshStatus();
+  }
+  async function pollControl(){
+    if(pending === null) return;
+    try{
+      var d = await api('/control/latest');
+      if(d && d.id === pending && d.status === 'ACKNOWLEDGED'){ $('cmdStatus').textContent = 'ACKNOWLEDGED'; $('cmdStatus').className = 'ack'; pending = null; }
+    }catch(e){}
+  }
+
+  /* ---------- grafik ---------- */
+  function draw(id, series, o){
+    o = o || {};
+    var cv = $(id), r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1, W = r.width, H = r.height;
+    if(W <= 0 || H <= 0) return;
+    if(cv.width !== Math.round(W*dpr) || cv.height !== Math.round(H*dpr)){ cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr); }
+    var x = cv.getContext('2d'); x.setTransform(dpr,0,0,dpr,0,0); x.clearRect(0,0,W,H);
+    var m = o.mini, pl = m ? 2 : 40, pr = m ? 2 : 12, pt = m ? 3 : 8, pb = m ? 3 : 22;
+    var s0 = series[0].data;
+    if(s0.length < 2){
+      if(!m){ x.fillStyle = '#94a3b8'; x.font = '12px IBM Plex Sans, sans-serif'; x.textAlign = 'center'; x.fillText('Menunggu data dari perangkat', W/2, H/2); }
+      return;
+    }
+    var all = []; series.forEach(function(s){ all = all.concat(s.data); }); if(o.zero) all.push(0);
+    var mn = Math.min.apply(null, all), mx = Math.max.apply(null, all);
+    if(o.band){ mn = Math.min(mn, o.band.c - o.band.h); mx = Math.max(mx, o.band.c + o.band.h); }
+    if(o.min !== undefined) mn = Math.min(o.min, mn);
+    if(mx === mn){ mx += 1; mn -= 1; }
+    var pad = (mx - mn) * 0.12; if(!(o.min !== undefined && mn === o.min)) mn -= pad; mx += pad;
+    var n = s0.length;
+    var X = function(i){ return pl + i / (n - 1) * (W - pl - pr); };
+    var Y = function(v){ return pt + (1 - (v - mn) / (mx - mn)) * (H - pt - pb); };
+
+    if(o.band){
+      x.fillStyle = 'rgba(217,119,6,.13)';
+      x.fillRect(pl, Y(o.band.c + o.band.h), W - pl - pr, Y(o.band.c - o.band.h) - Y(o.band.c + o.band.h));
+    }
+    if(!m){
+      x.font = '10.5px IBM Plex Mono, monospace'; x.lineWidth = 1;
+      for(var g = 0; g <= 3; g++){
+        var v = mn + (mx - mn) * g / 3, y = Y(v);
+        x.strokeStyle = 'rgba(15,23,42,.08)'; x.beginPath(); x.moveTo(pl, y); x.lineTo(W - pr, y); x.stroke();
+        x.fillStyle = '#94a3b8'; x.textAlign = 'right'; x.fillText(v.toFixed(o.dec || 0), pl - 6, y + 3);
+      }
+      if(o.zero){ x.strokeStyle = 'rgba(15,23,42,.3)'; x.beginPath(); x.moveTo(pl, Y(0)); x.lineTo(W - pr, Y(0)); x.stroke(); }
+      if(o.times){
+        x.fillStyle = '#94a3b8'; var ix = [0, Math.floor((n - 1) / 2), n - 1], al = ['left','center','right'];
+        ix.forEach(function(i, k){ x.textAlign = al[k]; x.fillText(o.times[i] || '', k === 0 ? pl : (k === 2 ? W - pr : X(i)), H - 6); });
+      }
+    }
+    series.forEach(function(s, si){
+      var d = s.data; if(d.length < 2) return;
+      if(o.fill && si === 0){
+        var gr = x.createLinearGradient(0, pt, 0, H - pb); gr.addColorStop(0, hexA(s.color, .22)); gr.addColorStop(1, hexA(s.color, 0));
+        x.beginPath(); d.forEach(function(v, i){ i ? x.lineTo(X(i), Y(v)) : x.moveTo(X(i), Y(v)); });
+        x.lineTo(X(d.length - 1), H - pb); x.lineTo(X(0), H - pb); x.closePath(); x.fillStyle = gr; x.fill();
+      }
+      x.beginPath(); x.strokeStyle = s.color; x.lineWidth = m ? 1.4 : 2; x.setLineDash(s.dash ? [5,4] : []);
+      d.forEach(function(v, i){ i ? x.lineTo(X(i), Y(v)) : x.moveTo(X(i), Y(v)); });
+      x.stroke(); x.setLineDash([]);
+      if(!m || si === 0){ x.beginPath(); x.fillStyle = s.color; x.arc(X(d.length - 1), Y(d[d.length - 1]), m ? 2 : 3.5, 0, 6.283); x.fill(); }
+    });
+  }
+  function drawAll(){
+    draw('cMain', [{data:hist.alt, color:C.alt}, {data:hist.set, color:C.set, dash:true}],
+      { fill:true, dec:0, times:hist.t, band:{ c:curSp, h:Math.max(CFG.BAND * Math.abs(curSp), 0.5) } });
+    var T = TABS[tab];
+    draw('cSide', [{data:hist[T.k], color:T.c}], { fill:true, min:T.min, dec:T.dec, zero:T.zero, times:hist.t });
+    [['spAlt','alt',C.alt],['spSet','set',C.set],['spErr','err',C.err],['spRpm','rpm',C.rpm],['spPwm','pwm',C.pwm],['spCur','cur',C.cur]]
+      .forEach(function(c){ draw(c[0], [{data:hist[c[1]], color:c[2]}], { mini:true, fill:true }); });
+  }
+
+  /* ---------- halaman analisis ---------- */
+  var CMP = ['rise_time','overshoot','settling_time','sse','iae','ise','itae'], DEC = [1,1,1,2,1,1,1];
+  function cell(v, d, best){ return v == null ? '<td class="na">-</td>' : '<td'+(best ? ' class="best"' : '')+'>'+fmtN(v, d)+'</td>'; }
+  function renderCompare(sum){
+    var by = {}; sum.forEach(function(s){ by[s.method] = s; });
+    var order = METHODS.map(function(m){ return m[0]; });
+    sum.forEach(function(s){ if(order.indexOf(s.method) < 0) order.push(s.method); });
+    var mins = {};
+    CMP.forEach(function(k){
+      var vals = order.map(function(m){ return by[m] && by[m].best ? by[m].best[k] : null; }).filter(function(v){ return v != null; });
+      mins[k] = vals.length > 1 ? Math.min.apply(null, vals) : null;
+    });
+    $('cmpBody').innerHTML = order.map(function(m){
+      var s = by[m], b = s && s.best, name = (METHODS.filter(function(x){ return x[0] === m; })[0] || [m, m])[1];
+      if(!b) return '<tr><td>'+m+' <span class="na">'+name+'</span></td><td class="na">0</td><td colspan="10" class="na" style="text-align:left">Belum ada sesi selesai</td></tr>';
+      var html = '<tr><td><b>'+m+'</b> <span class="na">'+name+'</span></td><td>'+s.runs+'</td>';
+      ['kp','ki','kd'].forEach(function(k){ html += cell(b[k], 3, false); });
+      CMP.forEach(function(k, i){ html += cell(b[k], DEC[i], mins[k] != null && b[k] === mins[k]); });
+      return html + '</tr>';
+    }).join('');
+
+    var items = order.map(function(m){ return { m:m, v: by[m] && by[m].best ? by[m].best.itae : null }; });
+    var valid = items.filter(function(i){ return i.v != null; }), max = Math.max.apply(null, valid.map(function(i){ return i.v; })), min = Math.min.apply(null, valid.map(function(i){ return i.v; }));
+    $('bars').innerHTML = valid.length ? items.map(function(i){
+      if(i.v == null) return '<div class="bar"><span class="bn">'+i.m+'</span><div class="bt"></div><b class="na">-</b></div>';
+      return '<div class="bar'+(valid.length > 1 && i.v === min ? ' best' : '')+'"><span class="bn">'+i.m+'</span><div class="bt"><i style="width:'+Math.max(3, i.v / max * 100)+'%"></i></div><b>'+fmtN(i.v,1)+'</b></div>';
+    }).join('') : '<div class="empty">Belum ada sesi selesai untuk dibandingkan.</div>';
+  }
+  function renderHistory(list){
+    lastList = list;
+    var L = { WAITING:'Menunggu', RUNNING:'Merekam', COMPLETED:'Selesai' };
+    $('histBody').innerHTML = list.length ? list.map(function(s){
+      var step = s.y0 != null && s.setpoint != null ? num(s.y0).toFixed(0) + ' ke ' + num(s.setpoint).toFixed(0) : '-';
+      return '<tr><td>#'+s.id+'</td><td>'+s.method+'</td><td>'+(L[s.status] || s.status)+'</td><td>'+fmtDT(s.started_at)+'</td><td>'+step+'</td>'+
+        cell(s.rise_time,1)+cell(s.overshoot,1)+cell(s.settling_time,1)+cell(s.itae,1)+'</tr>';
+    }).join('') : '<tr><td colspan="9" class="na" style="text-align:center;padding:18px">Belum ada sesi.</td></tr>';
+  }
+  async function refreshAnalysis(){
+    try{
+      var r = await Promise.all([api('/sessions/summary'), api('/sessions?limit=50')]);
+      renderCompare(r[0]); renderHistory(r[1]);
+    }catch(e){ $('cmpBody').innerHTML = '<tr><td colspan="12" class="na" style="text-align:left">Tidak dapat memuat data sesi: '+e.message+'</td></tr>'; }
+  }
+  function download(name, text){
+    var url = URL.createObjectURL(new Blob([text], {type:'text/csv'})), l = document.createElement('a');
+    l.href = url; l.download = name; l.click(); URL.revokeObjectURL(url);
+  }
+  $('csvSess').addEventListener('click', function(){
+    var cols = ['id','method','kp','ki','kd','status','started_at','ended_at','y0','setpoint','samples','rise_time','overshoot','settling_time','sse','iae','ise','itae'];
+    download('sesi_pengujian.csv', cols.join(',') + '\n' + lastList.map(function(s){ return cols.map(function(c){ return s[c] == null ? '' : s[c]; }).join(','); }).join('\n'));
+  });
+  $('csvBtn').addEventListener('click', async function(){
+    try{
+      var a = await api('/telemetry'); a.reverse();
+      download('telemetry_towercopter.csv', 'id,timestamp,altitude,rpm,pwm,current,setpoint,error\n' + a.map(function(o){ return [o.id,o.timestamp,o.altitude,o.rpm,o.pwm,o.current,o.setpoint,o.error].join(','); }).join('\n'));
+    }catch(e){ alert('Gagal mengunduh data. Pastikan backend FastAPI berjalan.'); }
+  });
+
+  /* ---------- navigasi & tab ---------- */
+  function show(p){
+    page = p;
+    $('pageMon').hidden = p !== 'mon'; $('pageAna').hidden = p !== 'ana';
+    $('navMon').setAttribute('aria-selected', p === 'mon'); $('navAna').setAttribute('aria-selected', p === 'ana');
+    if(p === 'mon') drawAll(); else refreshAnalysis();
+  }
+  $('navMon').addEventListener('click', function(){ show('mon'); });
+  $('navAna').addEventListener('click', function(){ show('ana'); });
+  document.querySelectorAll('.tab').forEach(function(b){
+    b.addEventListener('click', function(){
+      tab = b.dataset.tab;
+      document.querySelectorAll('.tab').forEach(function(t){ t.setAttribute('aria-selected', t === b ? 'true' : 'false'); });
+      $('sideTitle').textContent = TABS[tab].name; drawAll();
+    });
+  });
+
+  window.addEventListener('resize', function(){ if(page === 'mon') drawAll(); });
+  initControl(); renderSession(null); drawAll(); refreshStatus();
+  pollTelemetry(); pollSession();
+  setInterval(function(){ pollTelemetry(); pollControl(); pollSession(); }, CFG.POLL);
+  setInterval(function(){ refreshStatus(); if(page === 'ana') refreshAnalysis(); }, 3000);
+})();
+</script>
+</body>
+</html>
