@@ -1,7 +1,6 @@
 import json
 import paho.mqtt.client as mqtt
 from database import get_connection
-# from metrics import refresh_active_session
 
 MQTT_BROKER = "localhost"
 MQTT_PORT = 1883
@@ -13,7 +12,6 @@ mqtt_client = mqtt.Client(
     client_id="tower-copter-backend"
 )
 
-
 def on_message(client, userdata, msg):
     message = msg.payload.decode()
 
@@ -23,66 +21,29 @@ def on_message(client, userdata, msg):
         print("Pesan bukan JSON yang valid.")
         return
 
-    # =========================
-    # ACK
-    # =========================
+    # ACK CONTROL
     if msg.topic == ACK_TOPIC:
-
-        print()
-        print("ACK diterima")
-        print(f"Topic  : {msg.topic}")
-        print(f"Message: {message}")
-
         command_id = payload.get("command_id")
         status = payload.get("status")
 
-        if status != "ACKNOWLEDGED":
-            return
-
-        if not command_id:
-            print("ACK tidak memiliki command_id.")
+        if status != "ACKNOWLEDGED" or not command_id:
             return
 
         connection = get_connection()
-
         try:
             cursor = connection.cursor()
             sql = """
                 UPDATE control_logs
-                SET status = ?,
-                    ack_timestamp = datetime('now')
+                SET status = ?, ack_timestamp = datetime('now')
                 WHERE id = ?
             """
-
-            cursor.execute(
-                sql,
-                ("ACKNOWLEDGED", command_id)
-            )
-
+            cursor.execute(sql, ("ACKNOWLEDGED", command_id))
             connection.commit()
-
-            if cursor.rowcount > 0:
-                print(
-                    f"Command ID {command_id} berhasil di-update menjadi ACKNOWLEDGED."
-                )
-            else:
-                print(
-                    f"Command ID {command_id} tidak ditemukan di control_logs."
-                )
-
         finally:
             connection.close()
 
-    # =========================
-    # TELEMETRY
-    # =========================
+    # TELEMETRY DATA
     elif msg.topic == TELEMETRY_TOPIC:
-
-        print()
-        print("Telemetry diterima")
-        print(f"Topic  : {msg.topic}")
-        print(f"Message: {message}")
-
         altitude = payload.get("altitude")
         rpm = payload.get("rpm")
         pwm = payload.get("pwm")
@@ -95,40 +56,26 @@ def on_message(client, userdata, msg):
             return
 
         connection = get_connection()
-
         try:
             cursor = connection.cursor()
-            sql = """
-                INSERT INTO telemetry_logs
-                (timestamp, altitude, rpm, pwm, current, setpoint, error)
+            # Simpan ke tabel telemetry utama (yang dibaca main.py)
+            sql_main = """
+                INSERT INTO telemetry (altitude, setpoint, error, rpm, pwm, current, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+            """
+            cursor.execute(sql_main, (altitude, setpoint, error, rpm, pwm, current))
+
+            # Simpan juga ke telemetry_logs
+            sql_log = """
+                INSERT INTO telemetry_logs (timestamp, altitude, rpm, pwm, current, setpoint, error)
                 VALUES (datetime('now'), ?, ?, ?, ?, ?, ?)
             """
-
-            cursor.execute(
-                sql,
-                (
-                    altitude,
-                    rpm,
-                    pwm,
-                    current,
-                    setpoint,
-                    error
-                )
-            )
+            cursor.execute(sql_log, (altitude, rpm, pwm, current, setpoint, error))
 
             connection.commit()
-
-            print("Telemetry berhasil disimpan ke telemetry_logs.")
-
-            # Hitung ulang metrik sesi pengujian yang sedang aktif (jika ada).
-            # try:
-            #     refresh_active_session(connection)
-            # except Exception as exc:
-            #     print(f"Gagal memperbarui metrik sesi: {exc}")
-
+            print("Telemetry berhasil disimpan ke database.")
         finally:
             connection.close()
-
 
 def connect_mqtt():
     mqtt_client.on_message = on_message
@@ -137,9 +84,7 @@ def connect_mqtt():
     mqtt_client.subscribe(TELEMETRY_TOPIC)
     mqtt_client.loop_start()
 
-
 def publish_message(topic, message):
     result = mqtt_client.publish(topic, message)
-
     if result.rc != mqtt.MQTT_ERR_SUCCESS:
         raise Exception(f"Gagal publish MQTT. Error code: {result.rc}")
