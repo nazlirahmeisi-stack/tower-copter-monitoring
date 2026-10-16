@@ -37,7 +37,7 @@
   .brand h1{font-size:16px;}
   .brand p{margin:2px 0 0;font-size:12px;color:var(--muted);}
   .nav{display:flex;gap:4px;}
-  .nav a{display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500;padding:8px 14px;border-radius:9px;color:var(--muted);text-decoration:none;}
+  .nav a{display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500;padding:8px 14px;border-radius:99px;color:var(--muted);text-decoration:none;}
   .nav a:hover{color:var(--text);background:var(--panel2);}
   .nav a[aria-current=page]{color:#0369a1;background:#e6f2fa;}
   .top-r{display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
@@ -165,7 +165,6 @@
     .bar{grid-template-columns:40px 1fr 64px;}
   }
 
-  /* ===== Penyempurnaan & halaman beranda ===== */
   :root{--brand:#0369a1;--shadow:0 1px 2px rgba(16,24,40,.05);--shadow-lg:0 14px 36px rgba(15,23,42,.08);}
   .panel,.kpi{box-shadow:var(--shadow);} .panel{border-radius:16px;}
   .btn.primary{background:var(--brand);} a.btn{text-decoration:none;}
@@ -365,11 +364,12 @@
       <div class="bento">
         <a class="bc bc-a" href="#monitoring"><span class="bico" style="--c:var(--alt)"><svg class="i"><use href="#i-live"/></svg></span><h3>Monitoring real-time</h3><p>Data dari alat tampil tiap detik dalam kartu, grafik, dan log. Status koneksi membedakan backend yang mati dari perangkat yang belum mengirim data.</p><div class="tags"><span>Altitude</span><span>Setpoint</span><span>Error</span><span>RPM</span><span>PWM</span><span>Arus</span></div><span class="more">Buka monitoring<svg class="i"><use href="#i-arrow"/></svg></span></a>
         <a class="bc bc-b" href="#monitoring"><span class="bico" style="--c:var(--set)"><svg class="i"><use href="#i-sliders"/></svg></span><h3>Supervisory control</h3><p>Kirim START, STOP, dan setpoint dari dashboard. Setiap perintah dicatat dan dikonfirmasi oleh ESP32 lewat ACK.</p><span class="more">Buka kontrol<svg class="i"><use href="#i-arrow"/></svg></span></a>
-        <a class="bc bc-c" href="#monitoring"><span class="bico" style="--c:var(--pwm)"><svg class="i"><use href="#i-db"/></svg></span><h3>Data acquisition</h3><p>Seluruh telemetry tersimpan di MySQL dan bisa diunduh sebagai CSV untuk dianalisis lebih lanjut.</p><span class="more">Lihat log data<svg class="i"><use href="#i-arrow"/></svg></span></a>
+        <a class="bc bc-c" href="#monitoring"><span class="bico" style="--c:var(--pwm)"><svg class="i"><use href="#i-db"/></svg></span><h3>Data acquisition</h3><p>Seluruh telemetry tersimpan di database dan bisa diunduh sebagai CSV untuk dianalisis lebih lanjut.</p><span class="more">Lihat log data<svg class="i"><use href="#i-arrow"/></svg></span></a>
         <a class="bc bc-d" href="#analisis"><span class="bico" style="--c:var(--rpm)"><svg class="i"><use href="#i-flask"/></svg></span><h3>Analisis metode tuning</h3><p>Rise time, overshoot, settling time, serta IAE, ISE, dan ITAE dihitung di backend untuk tiap sesi, lalu dibandingkan antar metode.</p><div class="tags"><span>Ziegler-Nichols</span><span>CPO</span><span>SO</span><span>GJO</span></div><span class="more">Buka analisis<svg class="i"><use href="#i-arrow"/></svg></span></a>
       </div>
     </section>
-  </div>
+   </div> <!-- Penutup class="wrap" -->
+  </div> <!-- Penutup class="home" -->
 
   <!-- ================= HALAMAN MONITORING ================= -->
   <div class="main" id="pageMon" hidden>
@@ -552,7 +552,6 @@
     return j;
   }
 
-  /* ---------- status koneksi ---------- */
   function refreshStatus(){
     var mode = !online ? 'off' : (Date.now() - lastNewAt > CFG.STALE ? 'wait' : 'on');
     var label = { on:'Sistem online', wait:'Menunggu data perangkat', off:'Backend tidak terhubung' }[mode];
@@ -560,7 +559,6 @@
     updateNodes(mode);
   }
 
-  /* ---------- kontrol supervisory ---------- */
   function paintSlider(){
     var r = $('spRange'), p = (r.value - CFG.SP_MIN) / (CFG.SP_MAX - CFG.SP_MIN) * 100;
     r.style.setProperty('--p', p + '%');
@@ -591,7 +589,6 @@
     $('stopBtn').addEventListener('click', function(){ post('STOP'); });
   }
 
-  /* ---------- sesi pengujian (data dari backend) ---------- */
   function sessMsg(t){ if(t !== lastMsg){ lastMsg = t; $('sessMsg').textContent = t; } }
   function setC(id, v, d, u){ $(id).textContent = v == null ? '-' : fmtN(v, d) + (u || ''); }
   function renderSession(s){
@@ -618,7 +615,7 @@
   }
   async function pollSession(){
     try{ renderSession(await api('/sessions/current')); }
-    catch(e){ if(e.status === 404) sessMsg('Backend belum mendukung sesi. Perbarui main.py dan metrics.py.'); }
+    catch(e){ if(e.status === 404) sessMsg('Backend belum mendukung sesi.'); }
   }
   $('sStart').addEventListener('click', async function(){
     var body = { method: $('mSel').value };
@@ -634,7 +631,6 @@
     }catch(e){ sessMsg(e.message); }
   });
 
-  /* ---------- data telemetry ---------- */
   function update(d){
     var alt = num(d.altitude), sp = num(d.setpoint), err = num(d.error), rpm = num(d.rpm), pwm = num(d.pwm), cur = num(d.current);
     var run = rpm > 0, tstr = fmtTime(d.timestamp);
@@ -673,7 +669,6 @@
     }catch(e){}
   }
 
-  /* ---------- grafik ---------- */
   function draw(id, series, o){
     o = o || {};
     var cv = $(id), r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1, W = r.width, H = r.height;
@@ -736,7 +731,6 @@
       .forEach(function(c){ draw(c[0], [{data:hist[c[1]], color:c[2]}], { mini:true, fill:true }); });
   }
 
-  /* ---------- halaman analisis ---------- */
   var CMP = ['rise_time','overshoot','settling_time','sse','iae','ise','itae'], DEC = [1,1,1,2,1,1,1];
   function cell(v, d, best){ return v == null ? '<td class="na">-</td>' : '<td'+(best ? ' class="best"' : '')+'>'+fmtN(v, d)+'</td>'; }
   function renderCompare(sum){
@@ -794,7 +788,6 @@
     }catch(e){ alert('Gagal mengunduh data. Pastikan backend FastAPI berjalan.'); }
   });
 
-  /* ---------- beranda ---------- */
   var ROUTES = { beranda:'home', monitoring:'mon', analisis:'ana' };
   var NODE = { on:'Aktif', wait:'Menunggu data', off:'Terputus', unk:'Tidak diketahui' };
   function Yh(h){ var c = Math.min(CFG.SP_MAX, Math.max(CFG.SP_MIN, h)); return 318 - (c - CFG.SP_MIN) / (CFG.SP_MAX - CFG.SP_MIN) * 222; }
@@ -833,7 +826,6 @@
     }catch(e){ ['sTele','sCmd','sAck','sSess'].forEach(function(id){ $(id).textContent = '-'; }); }
   }
 
-  /* ---------- navigasi & tab ---------- */
   function show(p){
     page = p;
     $('pageHome').hidden = p !== 'home'; $('pageMon').hidden = p !== 'mon'; $('pageAna').hidden = p !== 'ana';
