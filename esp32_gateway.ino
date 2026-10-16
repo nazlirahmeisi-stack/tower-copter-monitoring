@@ -113,26 +113,29 @@ void reconnectMqttNonBlocking() {
 void forwardTelemetryFromMega() {
   while (MegaSerial.available()) {
     char c = MegaSerial.read();
+    
+    // Cetak langsung tiap karakter mentah dari Uno ke Serial Monitor
+    Serial.print(c); 
+
     if (c == '\n') {
       megaBuffer.trim();
       if (megaBuffer.length() > 0) {
-        // Validasi JSON sebelum dikirim ke MQTT Broker
         StaticJsonDocument<256> doc;
         DeserializationError err = deserializeJson(doc, megaBuffer);
 
         if (!err) {
           if (mqtt.connected()) {
             mqtt.publish(TOPIC_TELEMETRY, megaBuffer.c_str());
-            Serial.println("[UART -> MQTT] Telemetri diteruskan: " + megaBuffer);
+            Serial.println("\n[UART -> MQTT] Telemetri diteruskan: " + megaBuffer);
           }
         } else {
-          Serial.println("[WARN] Data UART bukan JSON valid: " + megaBuffer);
+          Serial.println("\n[WARN] Data UART bukan JSON valid: " + megaBuffer);
         }
       }
       megaBuffer = "";
     } else if (c != '\r') {
       megaBuffer += c;
-      if (megaBuffer.length() > 512) megaBuffer = ""; // Mencegah buffer overflow
+      if (megaBuffer.length() > 512) megaBuffer = "";
     }
   }
 }
