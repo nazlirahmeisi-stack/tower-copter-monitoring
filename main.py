@@ -54,7 +54,7 @@ def serve_dashboard():
     return {"message": "File index.html tidak ditemukan di root folder"}
 
 # =====================================================
-# 2. ENDPOINT TELEMETRI & CONTROL (SUPPORT WITH / WITHOUT /api PREFIX)
+# 2. ENDPOINT TELEMETRI & CONTROL
 # =====================================================
 @app.get("/telemetry")
 @app.get("/api/telemetry")
@@ -62,7 +62,7 @@ def get_telemetry():
     connection = get_connection()
     try:
         cursor = connection.cursor()
-        cursor.execute("SELECT * FROM telemetry ORDER BY id DESC")
+        cursor.execute("SELECT * FROM telemetry ORDER BY id DESC LIMIT 100")
         data = cursor.fetchall()
         return [dict(row) for row in data]
     finally:
@@ -76,7 +76,18 @@ def get_latest_telemetry():
         cursor = connection.cursor()
         cursor.execute("SELECT * FROM telemetry ORDER BY id DESC LIMIT 1")
         data = cursor.fetchone()
-        return dict(data) if data else {}
+        if data:
+            return dict(data)
+        return {
+            "id": 0,
+            "altitude": 0.0,
+            "setpoint": 0.0,
+            "error": 0.0,
+            "rpm": 0.0,
+            "pwm": 0.0,
+            "current": 0.0,
+            "timestamp": None
+        }
     finally:
         connection.close()
 
@@ -88,7 +99,9 @@ def get_latest_control():
         cursor = connection.cursor()
         cursor.execute("SELECT * FROM control_logs ORDER BY id DESC LIMIT 1")
         data = cursor.fetchone()
-        return dict(data) if data else {}
+        if data:
+            return dict(data)
+        return {"id": 0, "command": "STOP", "setpoint": 0.0, "status": "ACKNOWLEDGED"}
     finally:
         connection.close()
 
@@ -167,7 +180,7 @@ def send_control(control: ControlCommand):
         connection.close()
 
 # =====================================================
-# 3. ENDPOINT SESI PENGUJIAN PID
+# 3. ENDPOINT SESI PENGUJIAN PID & RINGKASAN ANALISIS
 # =====================================================
 @app.post("/sessions/start")
 @app.post("/api/sessions/start")
@@ -184,11 +197,10 @@ def start_session(body: SessionStart):
 
         cursor.execute("SELECT id, altitude, setpoint FROM telemetry ORDER BY id DESC LIMIT 1")
         latest = cursor.fetchone()
-        if not latest:
-            raise HTTPException(
-                status_code=400,
-                detail="Belum ada data telemetry. Pastikan perangkat sudah mengirim data."
-            )
+        
+        latest_id = latest["id"] if latest else 0
+        latest_alt = latest["altitude"] if latest else 0.0
+        latest_sp = latest["setpoint"] if latest else 0.0
 
         cursor.execute(
             """
@@ -197,7 +209,7 @@ def start_session(body: SessionStart):
             VALUES (?, ?, ?, ?, 'WAITING', datetime('now'), ?, ?, ?)
             """,
             (body.method, body.kp, body.ki, body.kd,
-             latest["id"], latest["altitude"], latest["setpoint"])
+             latest_id, latest_alt, latest_sp)
         )
         connection.commit()
         session_id = cursor.lastrowid
@@ -250,5 +262,30 @@ def list_sessions(limit: int = Query(50, ge=1, le=500)):
         cursor.execute("SELECT * FROM test_sessions WHERE status <> 'CANCELLED' ORDER BY id DESC LIMIT ?", (limit,))
         data = cursor.fetchall()
         return [dict(row) for row in data]
+    finally:
+        connection.close()
+
+@app.get("/sessions/summary")
+@app.get("/api/sessions/summary")
+def get_sessions_summary():
+    connection = get_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT * FROM test_sessions WHERE status = 'COMPLETED'")
+        rows = cursor.fetchall()
+        
+        methods = ["ZN", "CPO", "SO", "GJO", "MANUAL"]
+        summary = []
+        
+        for m in methods:
+            m_rows = [dict(r) for r in rows if r["method"] == m]
+            if m_rows:
+                valid_itae = [r for r in m_rows if r.get("itae") is not None]
+                best = min(valid_itae, key=lambda x: x["itae"]) if valid_itae else m_rows[0]
+                summary.append({"method": m, "runs": len(m_rows), "best": best})
+            else:
+                summary.append({"method": m, "runs": 0, "best": None})
+                
+        return summary
     finally:
         connection.close()
