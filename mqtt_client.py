@@ -46,29 +46,29 @@ def on_message(client, userdata, msg):
         connection = get_connection()
 
         try:
-            with connection.cursor() as cursor:
-                sql = """
-                    UPDATE control_logs
-                    SET status = %s,
-                        ack_timestamp = NOW()
-                    WHERE id = %s
-                """
+            cursor = connection.cursor()
+            sql = """
+                UPDATE control_logs
+                SET status = ?,
+                    ack_timestamp = datetime('now')
+                WHERE id = ?
+            """
 
-                cursor.execute(
-                    sql,
-                    ("ACKNOWLEDGED", command_id)
+            cursor.execute(
+                sql,
+                ("ACKNOWLEDGED", command_id)
+            )
+
+            connection.commit()
+
+            if cursor.rowcount > 0:
+                print(
+                    f"Command ID {command_id} berhasil di-update menjadi ACKNOWLEDGED."
                 )
-
-                connection.commit()
-
-                if cursor.rowcount > 0:
-                    print(
-                        f"Command ID {command_id} berhasil di-update menjadi ACKNOWLEDGED."
-                    )
-                else:
-                    print(
-                        f"Command ID {command_id} tidak ditemukan di control_logs."
-                    )
+            else:
+                print(
+                    f"Command ID {command_id} tidak ditemukan di control_logs."
+                )
 
         finally:
             connection.close()
@@ -97,28 +97,28 @@ def on_message(client, userdata, msg):
         connection = get_connection()
 
         try:
-            with connection.cursor() as cursor:
-                sql = """
-                    INSERT INTO telemetry_logs
-                    (timestamp, altitude, rpm, pwm, current, setpoint, error)
-                    VALUES (NOW(), %s, %s, %s, %s, %s, %s)
-                """
+            cursor = connection.cursor()
+            sql = """
+                INSERT INTO telemetry_logs
+                (timestamp, altitude, rpm, pwm, current, setpoint, error)
+                VALUES (datetime('now'), ?, ?, ?, ?, ?, ?)
+            """
 
-                cursor.execute(
-                    sql,
-                    (
-                        altitude,
-                        rpm,
-                        pwm,
-                        current,
-                        setpoint,
-                        error
-                    )
+            cursor.execute(
+                sql,
+                (
+                    altitude,
+                    rpm,
+                    pwm,
+                    current,
+                    setpoint,
+                    error
                 )
+            )
 
-                connection.commit()
+            connection.commit()
 
-                print("Telemetry berhasil disimpan ke telemetry_logs.")
+            print("Telemetry berhasil disimpan ke telemetry_logs.")
 
             # Hitung ulang metrik sesi pengujian yang sedang aktif (jika ada).
             # try:

@@ -53,5 +53,42 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Otomatis buat kedua tabel saat database.py dipanggil
+# =====================================================
+# Tabel tambahan (control_logs & telemetry_logs)
+# =====================================================
+def init_extra_tables():
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # 3. Tabel Control Logs (Log perintah kontrol)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS control_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            command TEXT NOT NULL,
+            setpoint REAL DEFAULT NULL,
+            status TEXT NOT NULL DEFAULT 'SENT',
+            ack_timestamp DATETIME DEFAULT NULL
+        )
+    """)
+
+    # 4. Tabel Telemetry Logs (Log telemetry dari MQTT)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS telemetry_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            altitude REAL,
+            rpm REAL,
+            pwm REAL,
+            current REAL,
+            setpoint REAL,
+            error REAL
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+# Otomatis buat semua tabel saat database.py dipanggil
 init_db()
+init_extra_tables()
