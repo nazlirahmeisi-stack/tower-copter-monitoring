@@ -11,7 +11,7 @@ from mqtt_client import connect_mqtt, publish_message
 
 app = FastAPI(title="Tower Copter Monitoring System")
 
-# Enable CORS agar Web Dashboard bisa mengakses API tanpa diblokir browser
+# Enable CORS agar Web Dashboard bisa mengakses API tanpa diblokir
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -43,7 +43,9 @@ class SessionStart(BaseModel):
     ki: float | None = None
     kd: float | None = None
 
-# 1. Sajikan index.html langsung saat membuka http://localhost:8000 atau http://192.168.1.17:8000
+# =====================================================
+# 1. SAJIKAN WEB DASHBOARD (index.html) DI ROOT ( / )
+# =====================================================
 @app.get("/")
 def serve_dashboard():
     index_path = Path(__file__).resolve().parent / "index.html"
@@ -51,7 +53,11 @@ def serve_dashboard():
         return FileResponse(index_path)
     return {"message": "File index.html tidak ditemukan di root folder"}
 
+# =====================================================
+# 2. ENDPOINT TELEMETRI & CONTROL (SUPPORT WITH / WITHOUT /api PREFIX)
+# =====================================================
 @app.get("/telemetry")
+@app.get("/api/telemetry")
 def get_telemetry():
     connection = get_connection()
     try:
@@ -63,6 +69,7 @@ def get_telemetry():
         connection.close()
 
 @app.get("/telemetry/latest")
+@app.get("/api/telemetry/latest")
 def get_latest_telemetry():
     connection = get_connection()
     try:
@@ -74,6 +81,7 @@ def get_latest_telemetry():
         connection.close()
 
 @app.get("/control/latest")
+@app.get("/api/control/latest")
 def get_latest_control():
     connection = get_connection()
     try:
@@ -85,6 +93,7 @@ def get_latest_control():
         connection.close()
 
 @app.get("/stats")
+@app.get("/api/stats")
 def get_stats():
     connection = get_connection()
     try:
@@ -100,7 +109,8 @@ def get_stats():
         
         try:
             cursor.execute("SELECT COUNT(*) AS n FROM test_sessions WHERE status = 'COMPLETED'")
-            sessions = cursor.fetchone()["n"]
+            sessions_data = cursor.fetchone()
+            sessions = sessions_data["n"] if sessions_data else 0
         except Exception:
             sessions = 0
 
@@ -115,11 +125,11 @@ def get_stats():
         connection.close()
 
 @app.post("/control")
+@app.post("/api/control")
 def send_control(control: ControlCommand):
     connection = get_connection()
     try:
         cursor = connection.cursor()
-        # Sintaks SQLite menggunakan datetime('now') dan tanda tanya (?)
         sql = """
             INSERT INTO control_logs (timestamp, command, setpoint, status)
             VALUES (datetime('now'), ?, ?, ?)
@@ -156,7 +166,11 @@ def send_control(control: ControlCommand):
     finally:
         connection.close()
 
+# =====================================================
+# 3. ENDPOINT SESI PENGUJIAN PID
+# =====================================================
 @app.post("/sessions/start")
+@app.post("/api/sessions/start")
 def start_session(body: SessionStart):
     connection = get_connection()
     try:
@@ -192,6 +206,7 @@ def start_session(body: SessionStart):
         connection.close()
 
 @app.post("/sessions/{session_id}/cancel")
+@app.post("/api/sessions/{session_id}/cancel")
 def cancel_session(session_id: int):
     connection = get_connection()
     try:
@@ -212,6 +227,7 @@ def cancel_session(session_id: int):
         connection.close()
 
 @app.get("/sessions/current")
+@app.get("/api/sessions/current")
 def get_current_session():
     connection = get_connection()
     try:
@@ -226,6 +242,7 @@ def get_current_session():
         connection.close()
 
 @app.get("/sessions")
+@app.get("/api/sessions")
 def list_sessions(limit: int = Query(50, ge=1, le=500)):
     connection = get_connection()
     try:
