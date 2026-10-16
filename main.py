@@ -4,13 +4,14 @@ from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, model_validator
 from database import get_connection
 from mqtt_client import connect_mqtt, publish_message
 
-app = FastAPI()
+app = FastAPI(title="Tower Copter Monitoring System")
 
+# Enable CORS agar Web Dashboard bisa mengakses API tanpa diblokir browser
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,6 +19,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Hubungkan MQTT Client saat server FastAPI dinyalakan
 connect_mqtt()
 
 class ControlCommand(BaseModel):
@@ -27,24 +29,13 @@ class ControlCommand(BaseModel):
     @model_validator(mode="after")
     def validate_command(self):
         self.command = self.command.upper()
-
         if self.command not in ["START", "STOP", "SETPOINT"]:
-            raise ValueError(
-                "command harus START, STOP, atau SETPOINT"
-            )
-
+            raise ValueError("command harus START, STOP, atau SETPOINT")
         if self.command == "SETPOINT" and self.setpoint is None:
-            raise ValueError(
-                "setpoint wajib diisi untuk command SETPOINT"
-            )
-
+            raise ValueError("setpoint wajib diisi untuk command SETPOINT")
         if self.command in ["START", "STOP"] and self.setpoint is not None:
-            raise ValueError(
-                "setpoint tidak diperlukan untuk command START atau STOP"
-            )
-
+            raise ValueError("setpoint tidak diperlukan untuk command START atau STOP")
         return self
-
 
 class SessionStart(BaseModel):
     method: Literal["ZN", "CPO", "SO", "GJO", "MANUAL"]
@@ -52,24 +43,22 @@ class SessionStart(BaseModel):
     ki: float | None = None
     kd: float | None = None
 
-
+# 1. Sajikan index.html langsung saat membuka http://localhost:8000 atau http://192.168.1.17:8000
 @app.get("/")
-def root():
-    return {"message": "Tower Copter Backend is running"}
+def serve_dashboard():
+    index_path = Path(__file__).resolve().parent / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+    return {"message": "File index.html tidak ditemukan di root folder"}
 
 @app.get("/telemetry")
 def get_telemetry():
     connection = get_connection()
     try:
-        with connection.cursor() as cursor:
-            sql = """
-                SELECT *
-                FROM telemetry_logs
-                ORDER BY timestamp DESC
-            """
-            cursor.execute(sql)
-            data = cursor.fetchall()
-            return data
+        cursor = connection.cursor()
+        cursor.execute("SELECT * FROM telemetry ORDER BY id DESC")
+        data = cursor.fetchall()
+        return [dict(row) for row in data]
     finally:
         connection.close()
 
@@ -77,16 +66,10 @@ def get_telemetry():
 def get_latest_telemetry():
     connection = get_connection()
     try:
-        with connection.cursor() as cursor:
-            sql = """
-                SELECT *
-                FROM telemetry_logs
-                ORDER BY timestamp DESC
-                LIMIT 1
-            """
-            cursor.execute(sql)
-            data = cursor.fetchone()
-            return data
+        cursor = connection.cursor()
+        cursor.execute("SELECT * FROM telemetry ORDER BY id DESC LIMIT 1")
+        data = cursor.fetchone()
+        return dict(data) if data else {}
     finally:
         connection.close()
 
@@ -94,41 +77,38 @@ def get_latest_telemetry():
 def get_latest_control():
     connection = get_connection()
     try:
-        with connection.cursor() as cursor:
-            sql = """
-                SELECT *
-                FROM control_logs
-                ORDER BY timestamp DESC
-                LIMIT 1
-            """
-            cursor.execute(sql)
-            data = cursor.fetchone()
-            return data
+        cursor = connection.cursor()
+        cursor.execute("SELECT * FROM control_logs ORDER BY id DESC LIMIT 1")
+        data = cursor.fetchone()
+        return dict(data) if data else {}
     finally:
         connection.close()
 
 @app.get("/stats")
 def get_stats():
-    """Ringkasan jumlah data untuk halaman beranda."""
     connection = get_connection()
     try:
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT COUNT(*) AS n, MAX(timestamp) AS last_ts FROM telemetry_logs")
-            tele = cursor.fetchone()
-            cursor.execute("SELECT COUNT(*) AS n FROM control_logs")
-            cmd = cursor.fetchone()
-            cursor.execute("SELECT COUNT(*) AS n FROM control_logs WHERE status = 'ACKNOWLEDGED'")
-            acked = cursor.fetchone()
-            try:
-                cursor.execute("SELECT COUNT(*) AS n FROM test_sessions WHERE status = 'COMPLETED'")
-                sessions = cursor.fetchone()["n"]
-            except Exception:
-                sessions = 0  # tabel test_sessions belum dibuat
+        cursor = connection.cursor()
+        cursor.execute("SELECT COUNT(*) AS n, MAX(timestamp) AS last_ts FROM telemetry")
+        tele = cursor.fetchone()
+        
+        cursor.execute("SELECT COUNT(*) AS n FROM control_logs")
+        cmd = cursor.fetchone()
+        
+        cursor.execute("SELECT COUNT(*) AS n FROM control_logs WHERE status = 'ACKNOWLEDGED'")
+        acked = cursor.fetchone()
+        
+        try:
+            cursor.execute("SELECT COUNT(*) AS n FROM test_sessions WHERE status = 'COMPLETED'")
+            sessions = cursor.fetchone()["n"]
+        except Exception:
+            sessions = 0
+
         return {
-            "telemetry": tele["n"],
-            "last_telemetry": tele["last_ts"],
-            "commands": cmd["n"],
-            "commands_acked": acked["n"],
+            "telemetry": tele["n"] if tele else 0,
+            "last_telemetry": tele["last_ts"] if tele else None,
+            "commands": cmd["n"] if cmd else 0,
+            "commands_acked": acked["n"] if acked else 0,
             "sessions_completed": sessions,
         }
     finally:
@@ -137,26 +117,17 @@ def get_stats():
 @app.post("/control")
 def send_control(control: ControlCommand):
     connection = get_connection()
-
     try:
-        # 1. Simpan command ke database
-        with connection.cursor() as cursor:
-            sql = """
-                INSERT INTO control_logs
-                (timestamp, command, setpoint, status)
-                VALUES (NOW(), %s, %s, %s)
-            """
+        cursor = connection.cursor()
+        # Sintaks SQLite menggunakan datetime('now') dan tanda tanya (?)
+        sql = """
+            INSERT INTO control_logs (timestamp, command, setpoint, status)
+            VALUES (datetime('now'), ?, ?, ?)
+        """
+        cursor.execute(sql, (control.command, control.setpoint, "SENT"))
+        connection.commit()
+        command_id = cursor.lastrowid
 
-            cursor.execute(
-                sql,
-                (control.command, control.setpoint, "SENT")
-            )
-
-            connection.commit()
-
-            command_id = cursor.lastrowid
-
-        # 2. Tentukan topic dan payload MQTT
         if control.command == "SETPOINT":
             topic = "towercopter/control/setpoint"
             payload = {
@@ -171,13 +142,9 @@ def send_control(control: ControlCommand):
                 "command": control.command
             }
 
-        # Format dictionary menjadi string JSON
         message = json.dumps(payload)
-
-        # 3. Publish ke MQTT
         publish_message(topic, message)
 
-        # 4. Kirim response
         return {
             "id": command_id,
             "command": control.command,
@@ -186,52 +153,40 @@ def send_control(control: ControlCommand):
             "mqtt_topic": topic,
             "mqtt_message": message
         }
-
     finally:
         connection.close()
-
-
-# =====================================================
-# SESI PENGUJIAN: metrik dihitung di backend (metrics.py),
-# diperbarui otomatis tiap telemetry masuk, disimpan di test_sessions.
-# =====================================================
 
 @app.post("/sessions/start")
 def start_session(body: SessionStart):
     connection = get_connection()
     try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT id FROM test_sessions WHERE status IN ('WAITING','RUNNING') LIMIT 1"
+        cursor = connection.cursor()
+        cursor.execute("SELECT id FROM test_sessions WHERE status IN ('WAITING','RUNNING') LIMIT 1")
+        if cursor.fetchone():
+            raise HTTPException(
+                status_code=409,
+                detail="Masih ada sesi aktif. Batalkan atau tunggu sampai selesai."
             )
-            if cursor.fetchone():
-                raise HTTPException(
-                    status_code=409,
-                    detail="Masih ada sesi aktif. Batalkan atau tunggu sampai selesai (tekan STOP)."
-                )
 
-            cursor.execute(
-                "SELECT id, altitude, setpoint FROM telemetry_logs ORDER BY id DESC LIMIT 1"
+        cursor.execute("SELECT id, altitude, setpoint FROM telemetry ORDER BY id DESC LIMIT 1")
+        latest = cursor.fetchone()
+        if not latest:
+            raise HTTPException(
+                status_code=400,
+                detail="Belum ada data telemetry. Pastikan perangkat sudah mengirim data."
             )
-            latest = cursor.fetchone()
-            if not latest:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Belum ada data telemetry. Pastikan perangkat sudah mengirim data."
-                )
 
-            cursor.execute(
-                """
-                INSERT INTO test_sessions
-                (method, kp, ki, kd, status, started_at, start_telemetry_id, y0, setpoint)
-                VALUES (%s, %s, %s, %s, 'WAITING', NOW(), %s, %s, %s)
-                """,
-                (body.method, body.kp, body.ki, body.kd,
-                 latest["id"], latest["altitude"], latest["setpoint"])
-            )
-            session_id = cursor.lastrowid
-
+        cursor.execute(
+            """
+            INSERT INTO test_sessions
+            (method, kp, ki, kd, status, started_at, start_telemetry_id, y0, setpoint)
+            VALUES (?, ?, ?, ?, 'WAITING', datetime('now'), ?, ?, ?)
+            """,
+            (body.method, body.kp, body.ki, body.kd,
+             latest["id"], latest["altitude"], latest["setpoint"])
+        )
         connection.commit()
+        session_id = cursor.lastrowid
         return {"id": session_id, "method": body.method, "status": "WAITING"}
     finally:
         connection.close()
@@ -240,85 +195,43 @@ def start_session(body: SessionStart):
 def cancel_session(session_id: int):
     connection = get_connection()
     try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                UPDATE test_sessions
-                SET status='CANCELLED', ended_at=NOW(), updated_at=NOW()
-                WHERE id=%s AND status IN ('WAITING','RUNNING')
-                """,
-                (session_id,)
-            )
-            changed = cursor.rowcount
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            UPDATE test_sessions
+            SET status='CANCELLED', ended_at=datetime('now'), updated_at=datetime('now')
+            WHERE id=? AND status IN ('WAITING','RUNNING')
+            """,
+            (session_id,)
+        )
         connection.commit()
-        if changed == 0:
-            raise HTTPException(status_code=404, detail="Sesi aktif dengan id tersebut tidak ditemukan.")
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Sesi aktif tidak ditemukan.")
         return {"id": session_id, "status": "CANCELLED"}
     finally:
         connection.close()
 
 @app.get("/sessions/current")
 def get_current_session():
-    """Sesi yang sedang aktif; bila tidak ada, sesi selesai terakhir."""
     connection = get_connection()
     try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT * FROM test_sessions WHERE status IN ('WAITING','RUNNING') ORDER BY id DESC LIMIT 1"
-            )
+        cursor = connection.cursor()
+        cursor.execute("SELECT * FROM test_sessions WHERE status IN ('WAITING','RUNNING') ORDER BY id DESC LIMIT 1")
+        data = cursor.fetchone()
+        if data is None:
+            cursor.execute("SELECT * FROM test_sessions WHERE status='COMPLETED' ORDER BY id DESC LIMIT 1")
             data = cursor.fetchone()
-            if data is None:
-                cursor.execute(
-                    "SELECT * FROM test_sessions WHERE status='COMPLETED' ORDER BY id DESC LIMIT 1"
-                )
-                data = cursor.fetchone()
-            return data
+        return dict(data) if data else {}
     finally:
         connection.close()
-
-@app.get("/sessions/summary")
-def get_sessions_summary():
-    """Sesi terbaik (ITAE terendah) per metode, hanya dari sesi selesai dengan step valid."""
-    connection = get_connection()
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT * FROM test_sessions
-                WHERE status='COMPLETED' AND itae IS NOT NULL AND ABS(setpoint - y0) >= 1
-                ORDER BY id DESC LIMIT 1000
-                """
-            )
-            rows = cursor.fetchall()
-    finally:
-        connection.close()
-
-    summary = {}
-    for row in rows:
-        item = summary.setdefault(row["method"], {"method": row["method"], "runs": 0, "best": None})
-        item["runs"] += 1
-        if item["best"] is None or row["itae"] < item["best"]["itae"]:
-            item["best"] = row
-    return list(summary.values())
 
 @app.get("/sessions")
 def list_sessions(limit: int = Query(50, ge=1, le=500)):
     connection = get_connection()
     try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT * FROM test_sessions WHERE status <> 'CANCELLED' ORDER BY id DESC LIMIT %s",
-                (limit,)
-            )
-            return cursor.fetchall()
+        cursor = connection.cursor()
+        cursor.execute("SELECT * FROM test_sessions WHERE status <> 'CANCELLED' ORDER BY id DESC LIMIT ?", (limit,))
+        data = cursor.fetchall()
+        return [dict(row) for row in data]
     finally:
         connection.close()
-
-
-# =====================================================
-# Sajikan dashboard dari server yang sama (buka http://IP-LAPTOP:8000/dashboard/)
-# Taruh index.html di folder "frontend" sejajar dengan main.py.
-# =====================================================
-_frontend_dir = Path(__file__).resolve().parent / "frontend"
-if _frontend_dir.is_dir():
-    app.mount("/dashboard", StaticFiles(directory=_frontend_dir, html=True), name="dashboard")
