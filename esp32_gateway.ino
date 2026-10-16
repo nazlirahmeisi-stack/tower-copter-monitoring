@@ -12,7 +12,7 @@
 #include <HardwareSerial.h>
 
 // ================= KONFIGURASI =================
-const char* WIFI_SSID     = "Anjay_grup";
+const char* WIFI_SSID     = "Anjay_Grup";
 const char* WIFI_PASSWORD = "Gaktau123";
 
 const char* MQTT_BROKER   = "192.168.18.40";
