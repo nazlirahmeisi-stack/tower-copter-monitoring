@@ -14,7 +14,7 @@
 const char* WIFI_SSID     = "Princess";
 const char* WIFI_PASSWORD = "TanyaBapakKos";
 
-const char* MQTT_BROKER   = "192.168.1.17";
+const char* MQTT_BROKER   = "192.168.1.32";
 const int   MQTT_PORT     = 1883;
 
 // Pin UART & Baud Rate ke Microcontroller
