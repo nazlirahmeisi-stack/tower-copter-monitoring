@@ -1,10 +1,3 @@
-/*
-  Tower Copter — ESP32 IoT Gateway (Sempurna)
-  Fungsi:
-    - Telemetri : Arduino Mega/Uno (UART) -> ESP32 -> MQTT Broker -> Backend FastAPI
-    - Perintah  : Backend FastAPI -> MQTT Broker -> ESP32 -> Arduino Mega/Uno (UART)
-*/
-
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
