@@ -44,9 +44,9 @@ void sendTelemetry() {
       if (altitude < setpoint) altitude += 0.5;
       else if (altitude > setpoint) altitude -= 0.5;
     }
-    rpm = 1800;
-    pwm = 150;
-    current = 0.52;
+    rpm = 0.0;
+    pwm = 0.0;
+    current = 0.0;
   } else {
     // Kondisi STOP / Standby
     if (altitude > 0) altitude -= 1.0;
